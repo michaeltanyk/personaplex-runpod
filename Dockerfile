@@ -27,9 +27,10 @@ RUN pip install --no-cache-dir \
         torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126 \
     && pip cache purge && rm -rf /root/.cache/pip
 
-# PersonaPlex moshi package (from git subdirectory — no manual clone needed)
-RUN pip install --no-cache-dir \
-        "moshi @ git+https://github.com/NVIDIA/personaplex.git#subdirectory=moshi" \
+# PersonaPlex — the pip package is named moshi-personaplex
+RUN git clone https://github.com/NVIDIA/personaplex.git /tmp/personaplex \
+    && pip install --no-cache-dir /tmp/personaplex/moshi/ \
+    && rm -rf /tmp/personaplex \
     && pip cache purge && rm -rf /root/.cache/pip
 
 # RunPod SDK + HuggingFace

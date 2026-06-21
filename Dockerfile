@@ -1,8 +1,5 @@
 # PersonaPlex RunPod Serverless Worker
-# ======================================
-# Runs NVIDIA PersonaPlex as a persistent WebSocket server on GPU.
-# Model loads once on worker start, stays warm for all requests.
-# Pay per second of GPU time, scales to zero when idle.
+# GPU-accelerated, pay-per-second, full-duplex voice AI
 
 FROM nvidia/cuda:12.6.0-runtime-ubuntu22.04
 
@@ -11,36 +8,38 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     HF_HOME=/app/hf_cache
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3.11 python3.11-dev python3.11-venv \
-    libopus-dev libsndfile1 ffmpeg \
-    git curl ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+# System deps in one layer with cleanup
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        python3-dev python3-venv python3-pip \
+        libopus-dev libsndfile-dev ffmpeg \
+        git curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 
 WORKDIR /app
 
-# Create venv
-RUN python3.11 -m venv /app/venv
+# Venv (python3 = 3.10 on Ubuntu 22.04)
+RUN python3 -m venv /app/venv
 ENV PATH="/app/venv/bin:$PATH"
 
-# Install PyTorch with CUDA support
+# PyTorch + cleanup
 RUN pip install --no-cache-dir \
-    torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
+        torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126 \
+    && pip cache purge && rm -rf /root/.cache/pip
 
-# Clone PersonaPlex and install
-RUN git clone https://github.com/NVIDIA/personaplex.git /app/personaplex \
-    && pip install --no-cache-dir /app/personaplex/moshi/ \
-    && pip install --no-cache-dir huggingface_hub
+# PersonaPlex — clone, install moshi, remove repo
+RUN git clone https://github.com/NVIDIA/personaplex.git /tmp/personaplex \
+    && cd /tmp/personaplex && pip install --no-cache-dir ./moshi/ \
+    && rm -rf /tmp/personaplex \
+    && pip cache purge && rm -rf /root/.cache/pip
 
-# RunPod SDK
-RUN pip install --no-cache-dir runpod
+# RunPod + HF
+RUN pip install --no-cache-dir huggingface_hub runpod \
+    && pip cache purge && rm -rf /root/.cache/pip
 
-# Copy handler
+# Handler
 COPY rp_handler.py /app/
-
-# Pre-download voice files (skip model weights — too big for Docker layer)
 COPY download_voices.py /app/
-RUN python3 /app/download_voices.py || echo "[build] Voice download deferred to runtime"
+RUN python3 /app/download_voices.py || echo "[build] Voice download deferred"
 
-# RunPod entrypoint — starts PersonaPlex server then enters worker loop
 CMD ["python3", "-u", "/app/rp_handler.py"]

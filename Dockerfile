@@ -8,7 +8,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     HF_HOME=/app/hf_cache
 
-# System deps in one layer with cleanup
+# System deps
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         python3-dev python3-venv python3-pip \
@@ -18,22 +18,21 @@ RUN apt-get update \
 
 WORKDIR /app
 
-# Venv (python3 = 3.10 on Ubuntu 22.04)
+# Venv
 RUN python3 -m venv /app/venv
 ENV PATH="/app/venv/bin:$PATH"
 
-# PyTorch + cleanup
+# PyTorch
 RUN pip install --no-cache-dir \
         torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126 \
     && pip cache purge && rm -rf /root/.cache/pip
 
-# PersonaPlex — clone, install moshi, remove repo
-RUN git clone https://github.com/NVIDIA/personaplex.git /tmp/personaplex \
-    && cd /tmp/personaplex && pip install --no-cache-dir ./moshi/ \
-    && rm -rf /tmp/personaplex \
+# PersonaPlex moshi package (from git subdirectory — no manual clone needed)
+RUN pip install --no-cache-dir \
+        "moshi @ git+https://github.com/NVIDIA/personaplex.git#subdirectory=moshi" \
     && pip cache purge && rm -rf /root/.cache/pip
 
-# RunPod + HF
+# RunPod SDK + HuggingFace
 RUN pip install --no-cache-dir huggingface_hub runpod \
     && pip cache purge && rm -rf /root/.cache/pip
 
